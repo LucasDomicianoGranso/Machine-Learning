@@ -1,0 +1,248 @@
+---
+title: "ME906 - Métodos em Aprendizado Supervisionado de Máquina"
+subtitle: "Atividade 04"
+output: html_notebook
+---
+
+
+```{r setup, include=FALSE}
+# Não altere esse chunk
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=9999)
+```
+
+
+```{r,message=FALSE,warning=FALSE,results='hide'}
+# Carregue os pacotes aqui
+library(tidymodels)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(leaps)
+library(kableExtra)
+library(glmnet)
+library(caret)
+```
+
+### Objetivo
+
+Encontrar um bom modelo para predizer a variável `Sale_Price` (usaremos `log10`), baseando-se nas informações disponíveis no conjunto de dados `ames`. Apenas modelos de regressão linear, Ridge e Lasso serão considerados.
+
+
+### Dados
+
+<!-- Não altere o código, assim todos terão o mesmo conjunto de dados  -->
+
+```{r}
+data(ames)
+ames <- ames %>% mutate(Sale_Price = log10(Sale_Price)) %>% select(Lot_Frontage,Lot_Area,Year_Built,Year_Remod_Add,Mas_Vnr_Area,First_Flr_SF,Second_Flr_SF,Gr_Liv_Area,Bsmt_Full_Bath,Bsmt_Half_Bath,Full_Bath,Half_Bath,Bedroom_AbvGr,Kitchen_AbvGr,TotRms_AbvGrd,Fireplaces,Garage_Cars,Pool_Area,Sale_Price)
+```
+
+O conjunto de dados `ames`, disponível no pacote `tidymodels`, contém informações de `r nrow(ames)` propriedades na cidade de Ames.
+
+Maiores detalhes: [http://jse.amstat.org/v19n3/decock/DataDocumentation.txt](http://jse.amstat.org/v19n3/decock/DataDocumentation.txt).
+
+Aqui, usaremos apenas algumas das variáveis do conjunto de dados.
+
+### Divisão dos dados
+
+
+<!-- Dados divididos em 60% treinamento, 20% validação e 20% teste. Cite quantas obs ficaram em cada conjunto de dados. -->
+
+
+O conjunto de dados completo possui 2930 observações e ele foi dividido de forma aleatória em 60% treinamento, 20% validação e 20% teste. Logo, o conjunto de dados de treinamento possui 1755 obeservações, o de validação, 587, e o de teste, 588 observações.
+
+<!-- Explique o propósito dessa divisão. -->
+
+Esta divisão tem como propósito ajudar a encontrar o melhor modelo e evitar que superajustamos um. Através dos dados de treinamento, serão ajustados modelos que consideramos razoáveis. Após isso, esses modelos serão comparados com os dados de validação e o melhor será aquele que possuir o menor Erro Quadrado Médio (isso quer dizer que será o modelo que melhor está predizendo dados novos). E o conjunto de dados teste servirá para vermos, através do EQM, se de fato a performace do modelo final escolhido (agora treinado pelo conjunto de dados de treino mais validação) está razoável com essas novas observações. 
+
+Caso não fosse feito essa divisão, pode ser que o modelo ajustado não se saia bem em novos conjuntos de dados. 
+
+<!-- Não altere o código, assim todos terão os mesmos conjuntos de dados  -->
+
+
+```{r}
+set.seed(22021)
+split_teste <- initial_split(ames, prop=0.8,strata = Sale_Price)
+#dados teste (dados "do gerente")
+teste <- split_teste %>% testing()
+# dados treinamento com validação
+treino_e_valid <- split_teste %>% training()
+split_treino <- initial_split(treino_e_valid, prop=0.75,strata = Sale_Price)
+#dados treinamento
+treino <- split_treino %>% training()
+#dados validação
+valid <- split_treino %>% testing()
+```
+
+
+### Análise exploratória
+
+<!-- Desconsidere os dados teste e apresente análise exploratória relevante dos dados treinamento+validação para auxiliar nos passos iniciais da busca por um modelo.  -->
+
+<!-- Caso decida utilizar transformação de alguma variável, criar outra variável, padronizar, etc... Aqui é o momento de motivar essas decisões. Se for este o caso, acrescente um parágrafo explicando as transformações que serão feitas (preprocessamento)-->
+
+<!-- Alguma variável será descartada logo de início? Justifique, se for o caso-->
+
+
+Nosso conjunto de dados, portanto, possui 19 variáveis. São elas:
+
+-   `Lot_Frontage`: Pés lineares da rua conectada à propriedade;
+-   `Lot_Area`: Area do lote em pés ao quadrado;
+-   `Year_Built`: Ano de construção da propriedade;
+-   `Year_Remod_Add`: Ano de reforma (igual à data de construção se não houver reforma ou acréscimos);
+-   `Mas_Vnr_Area`: Área de folheado de alvenaria em pés quadrados;
+-   `First_Flr_SF`: Área em pés quadrados do primeiro andar;
+-   `Second_Flr_SF`: Área em pés quadrados do segundo andar;
+-   `Gr_Liv_Area`: Área de estar acima do nível do solo em pés quadrados;
+-   `Bsmt_Full_Bath`: Número de banheiros no subsolo;
+-   `Bsmt_Half_Bath`: Número de banheiros incompletos no subsolo;
+-   `Full_Bath`: Número de banheiros completos acima do subsolo;
+-   `Half_Bath`: Número de banheiros incompletos acima do subsolo;
+-   `Bedroom_AbvGr`: Número de quartos (acima do subsolo);
+-   `Kitchen_AbvGr`: Número de cozinhas (acima do subsolo);
+-   `TotRms_AbvGrd`: Total de cômodos (acima do subsolo e sem contar banheiros); 
+-   `Fireplaces`: Número de lareiras;
+-   `Garage_Cars`: Tamanho da garagem em capacidade de carro;
+-   `Pool_Area`: Área da pscina em pés quadrados;
+-   `Sale_Price`: Log na base 10 do preço de venda (no conjunto de dados originais, essa variável não estava transformada).
+
+**Obs.:** Um banheiro completo é aquele que possui os 4 componentes principais de um banheiro (um vaso sanitário, pia, banheira e chuveiro). Já um banheiro incompleto (ou lavabo) é  aquele que possui apenas dois dos quatro componentes principais de um banheiro, normalmente sendo um vaso sanitário e uma pia. 
+
+
+
+Agora, vamos analisar os gráficos de dispersão entre as variáveis numéricas no conjunto de dados, duas a duas, e suas correlações. 
+
+```{r}
+library(GGally)
+```
+
+
+#chart.Correlation(treino_e_valid,histogram = FALSE)
+```{r, fig.height=10,fig.width=14}
+ggpairs(treino_e_valid)
+```
+
+
+
+Note que há a presença de algumas variáveis discretas nos gráficos de dispersão. Por isso, refizemos o gráfico abaixo sem elas:
+
+```{r, fig.height=10,fig.width=14}
+dispersao = treino_e_valid %>% select(-Bsmt_Full_Bath, -Bsmt_Half_Bath, -Full_Bath, -Half_Bath, -Bedroom_AbvGr, -Kitchen_AbvGr, -Fireplaces, -Garage_Cars , -Pool_Area)
+chart.Correlation(dispersao,histogram = FALSE)
+```
+
+
+Abaixo, consta a tabela 1 com as estatísticas sumárias do conjunto de dados:
+
+
+```{r}
+ treino_e_valid %>% summarise("Variáveis" = c("Lot_Frontage", "Lot_Area", "Year_Built", "Year_Remod_Add", "Mas_Vnr_Area", "First_Flr_SF", "Second_Flr_SF", "Gr_Liv_Area", "Bsmt_Full_Bath", "Bsmt_Half_Bath", "Full_Bath", "Half_Bath", "Bedroom_AbvGr", "Kitchen_AbvGr", "TotRms_AbvGrd", "Fireplaces", "Garage_Cars", "Pool_Area", "Sale_Price"), 
+                                                                                             "Mín." = c(min(Lot_Frontage),min(Lot_Area), min(Year_Built), min(Year_Remod_Add), min(Mas_Vnr_Area), min(First_Flr_SF), min(Second_Flr_SF), min(Gr_Liv_Area),min(Bsmt_Full_Bath), min(Bsmt_Half_Bath), min(Full_Bath), min(Half_Bath), min(Bedroom_AbvGr),min(Kitchen_AbvGr), min(TotRms_AbvGrd), min(Fireplaces), min(Garage_Cars), min(Pool_Area), min(Sale_Price)),
+                                                                                             "1º Q" = c(quantile(Lot_Frontage, probs = 0.25),quantile(Lot_Area, probs = 0.25), quantile(Year_Built, probs = 0.25), quantile(Year_Remod_Add, probs = 0.25), quantile(Mas_Vnr_Area, probs = 0.25), quantile(First_Flr_SF, probs = 0.25),quantile(Second_Flr_SF, probs = 0.25),quantile(Gr_Liv_Area, probs = 0.25),quantile(Bsmt_Full_Bath, probs = 0.25),quantile(Bsmt_Half_Bath, probs = 0.25), quantile(Full_Bath, probs = 0.25),quantile(Half_Bath, probs = 0.25),quantile(Bedroom_AbvGr, probs = 0.25), quantile(Kitchen_AbvGr, probs = 0.25), quantile(TotRms_AbvGrd, probs = 0.25), quantile(Fireplaces, probs = 0.25),quantile(Garage_Cars, probs = 0.25),quantile(Pool_Area, probs = 0.25),quantile(Sale_Price, probs = 0.25)), 
+                                                                                             "Mediana"= c(median(Lot_Frontage),median(Lot_Area), median(Year_Built), median(Year_Remod_Add), median(Mas_Vnr_Area), median(First_Flr_SF), median(Second_Flr_SF), median(Gr_Liv_Area),median(Bsmt_Full_Bath), median(Bsmt_Half_Bath), median(Full_Bath), median(Half_Bath), median(Bedroom_AbvGr),median(Kitchen_AbvGr), median(TotRms_AbvGrd), median(Fireplaces), median(Garage_Cars), median(Pool_Area), median(Sale_Price)), 
+                                                                                             "Média" = c(mean(Lot_Frontage),mean(Lot_Area), mean(Year_Built), mean(Year_Remod_Add), mean(Mas_Vnr_Area), mean(First_Flr_SF), mean(Second_Flr_SF), mean(Gr_Liv_Area),mean(Bsmt_Full_Bath), mean(Bsmt_Half_Bath), mean(Full_Bath), mean(Half_Bath), mean(Bedroom_AbvGr),mean(Kitchen_AbvGr), mean(TotRms_AbvGrd), mean(Fireplaces), mean(Garage_Cars), mean(Pool_Area), mean(Sale_Price)), 
+                                                                                             "3º Q." = c(quantile(Lot_Frontage, probs = 0.75),quantile(Lot_Area, probs = 0.75), quantile(Year_Built, probs = 0.75), quantile(Year_Remod_Add, probs = 0.75), quantile(Mas_Vnr_Area, probs = 0.75), quantile(First_Flr_SF, probs = 0.75),quantile(Second_Flr_SF, probs = 0.75),quantile(Gr_Liv_Area, probs = 0.75),quantile(Bsmt_Full_Bath, probs = 0.75),quantile(Bsmt_Half_Bath, probs = 0.75), quantile(Full_Bath, probs = 0.75),quantile(Half_Bath, probs = 0.75),quantile(Bedroom_AbvGr, probs = 0.75), quantile(Kitchen_AbvGr, probs = 0.75), quantile(TotRms_AbvGrd, probs = 0.75), quantile(Fireplaces, probs = 0.75),quantile(Garage_Cars, probs = 0.75),quantile(Pool_Area, probs = 0.75),quantile(Sale_Price, probs = 0.75)), 
+                                                                                             "Máx." = c(max(Lot_Frontage),max(Lot_Area), max(Year_Built), max(Year_Remod_Add), max(Mas_Vnr_Area), max(First_Flr_SF), max(Second_Flr_SF), max(Gr_Liv_Area),max(Bsmt_Full_Bath), max(Bsmt_Half_Bath), max(Full_Bath), max(Half_Bath), max(Bedroom_AbvGr),max(Kitchen_AbvGr), max(TotRms_AbvGrd), max(Fireplaces), max(Garage_Cars), max(Pool_Area), max(Sale_Price)), 
+                                                                                             "Variância"= c(var(Lot_Frontage),var(Lot_Area), var(Year_Built), var(Year_Remod_Add), var(Mas_Vnr_Area), var(First_Flr_SF), var(Second_Flr_SF), var(Gr_Liv_Area),var(Bsmt_Full_Bath), var(Bsmt_Half_Bath), var(Full_Bath), var(Half_Bath), var(Bedroom_AbvGr),var(Kitchen_AbvGr), var(TotRms_AbvGrd), var(Fireplaces), var(Garage_Cars), var(Pool_Area), var(Sale_Price)), 
+                                                                                             "Des. Padrão" = c(sd(Lot_Frontage),sd(Lot_Area), sd(Year_Built), sd(Year_Remod_Add), sd(Mas_Vnr_Area), sd(First_Flr_SF), sd(Second_Flr_SF), sd(Gr_Liv_Area),sd(Bsmt_Full_Bath), sd(Bsmt_Half_Bath), sd(Full_Bath), sd(Half_Bath), sd(Bedroom_AbvGr),sd(Kitchen_AbvGr),sd(TotRms_AbvGrd), sd(Fireplaces), sd(Garage_Cars), sd(Pool_Area), sd(Sale_Price))) %>% 
+  kbl(caption="Tabela 1:  Estatística Descritiva das Variáveis Quantitativas") %>%
+  kable_classic(full_width = F, html_font = "Arial")
+```
+
+Através dos gráficos de dispersões e das análises de correleções, notamos que a maioria das variáveis preditoras são bem correlacianadas com a variável resposta. Além disso, quase todas as variáveis preditoras não possuíram uma correlção tão forte entre si a ponto de poderem acarretar em problemas com a multicolineariadade no modelo. Exceto as variáveis preditoras "Gr_Liv_Area" e "TotRms_AbvGrd" que possuíram uma forte correlação entre si e igual a 0.81. Ainda que não seja uma correlação extremamente alta, para evitar esse problema, resolvemos eliminar uma delas do nosso conjunto de dados e a escolhida foi a "TotRms_AbvGrd" por possuir uma correlação menor com a variável resposta.
+
+
+```{r}
+#Lendo o conjunto de dados sem TotRms_AbvGrd
+data(ames)
+ames <- ames %>% mutate(Sale_Price = log10(Sale_Price)) %>% select(Lot_Frontage,Lot_Area,Year_Built,Year_Remod_Add,Mas_Vnr_Area,First_Flr_SF,Second_Flr_SF,Gr_Liv_Area,Bsmt_Full_Bath,Bsmt_Half_Bath,Full_Bath,Half_Bath,Bedroom_AbvGr,Kitchen_AbvGr,Fireplaces,Garage_Cars,Pool_Area,Sale_Price)
+#dividindo novamente os conjuntos de dados de treinamento, validação e teste, porém sem a variável TotRms_AbvGrd 
+#Note que o conjunto de dados de treinamento, validação e teste gerados serão os mesmos de antes pois não mudamos a semente
+set.seed(22021)
+split_teste <- initial_split(ames, prop=0.8,strata = Sale_Price)
+#dados teste (dados "do gerente")
+teste <- split_teste %>% testing()
+# dados treinamento com validação
+treino_e_valid <- split_teste %>% training()
+split_treino <- initial_split(treino_e_valid, prop=0.75,strata = Sale_Price)
+#dados treinamento
+treino <- split_treino %>% training()
+#dados validação
+valid <- split_treino %>% testing()
+```
+
+
+Além disso, importante ressaltar que as variáveis possuem diferenças significativas em seus valores com nos mostra a tabela 1. Portanto, iremos preprocessar os dados (centrando a média deles no 0 e a variância no 1) porque será utilizado métodod de redução de dimensão e outras técnicas que utilizam da disTância entre esses valores. Logo, iremos padronizar todas as variáveis preditoras sendo que os dados de valição serão padranizados levando em consideração a média e a variância dos dados de treinamento e a os dados de teste serão padronizados com base nos dados de treino e validação juntos:
+
+
+
+```{r}
+preProcValues <- preProcess(treino[, -18], method = c("center", "scale")) # preprocessando somente as variáveis preditoras dos dados de treino
+treino <- predict(preProcValues, treino)
+valid <- predict(preProcValues, valid)
+preProcValuesfinal <- preProcess(treino_e_valid[, -18], method = c("center", "scale")) # preprocessando somente as variáveis preditoras dos dados de treino
+treino_e_valid <- predict(preProcValuesfinal, treino_e_valid)
+teste <- predict(preProcValuesfinal, teste)
+```
+
+
+Sobre as vaiáveis discretas, todas elas serão usadas como númericas em nossos modelos e não como categóricas. Isso para que, embora seja raro algumas variáreis preditoras possuírem valores maiores que as observadas, como número de banheiro por exemplo, ainda possa ser  possível predizer mesmo que pouco a variável resposta para contagens altas.  
+
+
+<!-- Deixe claro qual será sua matrix X: o que será excluído, o que será criado/transformado. -->
+
+Portanto, nossa matriz X será composta por todas as variáveis do conjundo de dados descritas anteriormente, exceto pelas variáveis "TotRms_AbvGrd" e "Sale_Price" (a primeira porque foi removida e segunda porque é nossa variável resposta, sendo ela, portanto, o nosso vetor y).
+
+
+
+### Modelos propostos
+
+<!-- Utilize somente os dados de treinamento, considerando a matriz X após análise descritiva.-->
+
+
+
+
+#### Regressão com componentes principais
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) para escolher o número de componentes a ser utilizado no modelo de regressão linear. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule o EQM_treino-->
+
+#### Regressão com mínimos quadrados parciais
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) para escolher M. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule o EQM_treino-->
+
+
+#### KNN
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) para escolher o número de vizinhos. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule o EQM_treino-->
+
+
+### Avaliação de modelos propostos
+
+<!-- Apresente uma tabela com duas colunas: EQM_treino e EQM_validacao e as 3 linhas indicando: Regressão PCA, Regressão Mínimos Quadrados Parciais e KNN. Essa é a informação mínima a ser apresentada aqui. Você pode complementar como preferir. -->
+
+
+<!-- Indique qual o melhor modelo, baseando-se no EQM da validação. Comente o que for necessário. -->
+
+
+
+### Modelo Final
+
+<!-- Atenção, só venha para este passo final após ter finalizado os passos anteriores. As mudanças nos modelos devem ser feitas apenas com treinamento/validação, não com o teste. -->
+
+<!-- O modelo final deverá ser treinado utilizando, conjuntamente, os dados de treinamento e validação. Calcule o EQM deste modelo final nesses dados.  -->
+
+<!-- Apresente o modelo final brevemente. -->
+
+<!-- Calcule o EQM deste modelo final nos dados teste. -->

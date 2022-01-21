@@ -1,0 +1,245 @@
+---
+title: "ME906 - Métodos em Aprendizado Supervisionado de Máquina"
+subtitle: "Atividade 07"
+output: 
+  bookdown::word_document2:
+     toc: FALSE
+urlcolor: blue
+bibliography: referencia.bib
+---
+
+
+```{r setup, include=FALSE}
+# Você pode alterar esse chunk caso ajude em ter um relatório mais organizado
+knitr::opts_chunk$set(echo = FALSE,message = FALSE)
+options(scipen=9999)
+```
+
+
+```{r,message=FALSE,warning=FALSE,results='hide'}
+# Carregue os pacotes aqui/modifique de acordo
+library(tidymodels)
+library(tidyverse)
+library(knitr)
+library(readr)
+```
+
+# Introdução
+
+<!-- sua introdução aqui -->
+
+  Para o seguinte documento usaremos os dados presentes no seguinte link:  https://www.kaggle.com/c/sliced-s01e05-WXx7h8/data?select=test.csv . No qual temos que predizer o preço de Airbnb na cidade de Nova Iorque.
+  
+  
+```{r}
+
+treino <- read.csv("C:/Users/lucas/OneDrive/Área de Trabalho/ME906/TRABALHO FINAL/train.csv/train.csv")
+
+teste <- read.csv("C:/Users/lucas/OneDrive/Área de Trabalho/ME906/TRABALHO FINAL/test.csv (1)/test.csv")
+
+```
+
+  Podemos observar que os dados de treinamento e de teste já estão separados e portanto não precisamos dividir-los. No qual o nosso banco de dados possuem as 10 primeirasa linhas como a seguir:
+
+```{r}
+
+
+#dados <- treino[,1:10]
+#kable(dados,booktabs = T,caption="Dados de Treino")
+head(treino)
+
+#names(treino)
+#names(teste)
+```
+
+No qual temos 16 colunas que são : 
+
+*id:* identificador único
+
+*name:* nome do anúncio
+
+*host_id:* identificado único do hospedeiro
+
+*host_name:* nome do hospedeiro
+
+*neighbourhood_group:* onde está localizado (exemplo: "Manhattan")
+
+*neighbourhood:* neighborhood where the listing is located (e.g., "East Harlem")
+
+*latitude:* latitude onde está localizada
+
+*longitude:* longitude onde está localizada
+
+*room_type:* tipo (quarto , apartamento , casa e etc)
+
+*price:* preço por cada noite alugada (presente na variável reposta)
+
+*minimum_nights:* o mínimo de noitos que poderá passar na hospedagem
+
+*number_of_reviews:* número de avaliações
+
+*last_review:* a data da ultima avaliação
+
+*reviews_per_month:* número de avaliações em média por mês
+
+*calculated_host_listings_count:*   número de que o hospedeiro tem  (number of listing the host has)
+
+*availability_365:* número de dias que o agendamento está em aberto
+
+Na figura seguinte:
+
+```{r}
+
+
+gg <- ggplot(treino,aes(x=price)) + geom_histogram(binwidth=5)
+gg
+
+
+
+```
+
+
+Conseguimos entender através dos gráficos que
+
+
+```{r}
+gg <- ggplot(treino,aes(y=price)) + geom_boxplot()
+gg
+```
+
+Ao observar tanto os dados de price uand
+
+
+# Exemplo
+
+<!-- REMOVA essa seção e todo seu conteúdo, é apenas um exemplo para configurações de tabelas/gráficos/bibliografia -->
+
+
+Como exemplo, usamos os dados de @henderson1981building:
+
+```{r tabX}
+# exemplo de um dado qq só para ilustrar a tabela
+#dt <- mtcars[1:5, 1:6]
+#kable(dt,booktabs = T,caption="Minha legenda aqui blablabla")
+```
+
+Exemplo de como referenciar essa tabela no texto. Na Tabela \@ref(tab:tabX) observa-se blablablabalba. Na Figura \@ref(fig:figX) blablablbalblablabla. Na Figura \@ref(fig:figY)......
+
+
+```{r figX,fig.cap = "A legenda da minha figura vem escrita aqui",fig.align='center',fig.width=4,fig.height=3}
+gg <- ggplot(mtcars,aes(x=mpg)) + geom_histogram(binwidth=5)
+gg
+```
+
+
+```{r figY,fig.cap = "A legenda da minha segunda figura vem escrita aqui",fig.align='center',fig.width=4,fig.height=3}
+gg <- ggplot(mtcars,aes(y=mpg)) + geom_boxplot()
+gg
+```
+
+
+```{r}
+media <- mean(dt$mpg)
+```
+
+A média da variávelX é `r media`.
+
+# Objetivo
+
+
+
+# Banco de dados 
+
+<!-- sua descriçao do banco de dados/variáveis aqui. Coloque a fonte/referência do banco de dados -->
+
+<!-- Faça uma análise descritiva para avaliar os tipos de variáveis e verificar possíveis inconsistências nos dados. Faça filtros e modificações de acordo com o que julgar necessário, mencione clara e concisamente o que foi feito. Não apresente comandos no corpo do relatório e saídas desformatadas.-->
+
+<!-- Utilize esses dados "arrumados" nos passos seguintes.-->
+
+<!-- Alguma variável será descartada logo de início? Justifique, se for o caso-->
+
+
+# Divisão dos dados
+
+<!-- Divida o dado de treinamento disponível no Kaggle em duas partes: Treino e Validação, lembre de colocar um set.seed antes. Cite quantas obs ficaram em cada conjunto de dados. -->
+
+<!-- Explique o propósito dessa divisão. -->
+
+
+# Análise exploratória
+
+<!-- Apresente análise exploratória relevante dos dados para auxiliar nos passos iniciais da busca por um modelo.  Quais gráficos são relevantes para mostrar associação com a resposta? Se usar gráficos de barra, como apresentar e interpretar? Boxplots? Não coloque gráficos sem justificar/interpretar. Na análise descritiva fazemos muitos gráficos, dos vários feitos, quais são interessantes para "contar a história", tendo em mente o objetivo-->
+
+<!-- Caso decida utilizar transformação de alguma variável, criar outra variável, padronizar, etc... Aqui é o momento de motivar essas decisões. Se for este o caso, acrescente um parágrafo explicando as transformações que serão feitas (preprocessamento)-->
+
+<!-- Alguma variável será descartada logo de início? Justifique, se for o caso-->
+
+<!-- Deixe claro qual será sua matrix X: o que será excluído, o que será criado/transformado. Apresente isso de maneira clara e concisa -->
+
+
+# Modelos propostos
+
+<!-- Utilize somente os dados de treinamento, considerando a matriz X após análise descritiva.-->
+
+<!-- Caso precise ajustar hiperparâmetros/tunning parameters, use alguma forma de validação cruzada, lembre de usar set.seed. -->
+
+<!-- Caso algum preprocessamento específico para um determinado método seja necessário, cite o que foi feito e em quais modelos isso foi considerado, se for o caso. O preprocessamento deve ser aplicado em cada parte da validação cruzada, não antes. -->
+
+<!-- Métodos podem ser LDA, QDA, Logística, LASSO, Ridge, KNN, árvores, bestglm (regsubsets para classificação), etc... escolha pelo menos 3 grandes grupos de métodos diferentes. --> 
+
+
+## Título do Método 1 
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) se necessário. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule as métricas de avaliação de desempenho do modelo nos dados de treinamento: matriz de confusão, acurácia, especificidade, sensibilidade, entre outras que julgar interessante/relevante ao seu problema específico. Quando apresentar qualquer métrica pela primeira vez, defina-a em detalhes-->
+
+
+## Título do Método 2
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) se necessário. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule as métricas de avaliação de desempenho do modelo nos dados de treinamento: matriz de confusão, acurácia, especificidade, sensibilidade, entre outras que julgar interessante/relevante ao seu problema específico. Quando apresentar qualquer métrica pela primeira vez, defina-a em detalhes-->
+
+
+## Título do Método 3
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) se necessário. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule as métricas de avaliação de desempenho do modelo nos dados de treinamento: matriz de confusão, acurácia, especificidade, sensibilidade, entre outras que julgar interessante/relevante ao seu problema específico. Quando apresentar qualquer métrica pela primeira vez, defina-a em detalhes-->
+
+
+
+# Avaliação de modelos propostos
+
+<!-- Apresente o desempenho do modelo obtido no treino avaliando as predições na validação. Lembrando que mais de uma métrica pode ser usada para avaliar: ROC, AUC, acurácia, sensitividade, etc... ou MSE, MAE...--> 
+
+
+<!-- Baseando-se nessas informações, escolha o melhor modelo. Comente o que for necessário, justificando sua escolha. -->
+
+
+
+
+
+# Modelo Final
+
+<!-- Destaque aqui seu modelo final (ajustado/treinado novamente considerando os dados de treinamento fornecidos pelo kaggle, ou seja, seu Treino+Validação conjuntamente), apresentando/interpretando em maiores detalhes. Caso as preditoras sejam interpretáveis, faça um balanço entre modelos com alto poder preditivo vs interpretabilidade na sua escolha-->
+
+<!-- Apresente o resultado das métricas de desempenho do seu modelo final (ajustado no treinamento fornecidos pelo kaggle) na predição dos dados teste do kaggle. Aqui, você deverá submeter sua predição, seguindos as instruções do Kaggle. Faça um print da sua submissão, mostrando seu resultado -->
+
+<!-- Escreva um trecho nessa parte, descrevendo esse modelo para uma pessoa "leiga". Acrescente gráficos para auxiliar no entendimento da solução proposta.--> 
+
+
+# Bibliografia
+
+<!-- não coloque nada aqui, será feito automaticamente se vc usar .bib e @ para citar referencias no texto, conforme o video explicativo indicado no roteiro-->
+
+<!-- para construir o .bib, use o cite https://www.doi2bib.org/, caso seja uma referência com DOI --> 
+
+<!-- ao utilizar cada método, cite o autor e também referencie o pacote utilizado, no R, pegue o .bib usando citation("nomedopacote") -->

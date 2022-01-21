@@ -1,0 +1,380 @@
+---
+title: "ME906 - Métodos em Aprendizado Supervisionado de Máquina"
+subtitle: "Atividade 06"
+output: pdf_document
+urlcolor: blue
+---
+
+
+```{r setup, include=FALSE}
+# Não altere esse chunk
+knitr::opts_chunk$set(echo = FALSE,message = FALSE)
+options(scipen=9999)
+```
+
+
+```{r,message=FALSE,warning=FALSE,results='hide'}
+# Carregue os pacotes aqui
+library(tidymodels)
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+library(caret)
+library(PerformanceAnalytics)
+```
+
+## Objetivo
+
+Encontrar um bom modelo para predizer se um episódio de Scooby Doo tem um monstro real ou não baseando-se nas informações disponíveis sobre os episódios.
+
+
+## Dados 
+
+O conjunto de dados está disponível no [Kaggle](https://www.kaggle.com/williamschooleman/scoobydoo-complete). Maiores informações sobre as variáveis estão disponíveis através no [link](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-07-13/readme.md).
+
+```{r}
+# utilize o comando abaixo para baixar os dados:
+scooby <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-07-13/scoobydoo.csv")
+```
+
+
+<!-- Faça uma análise descritiva para avaliar os tipos de variáveis e verificar possíveis inconsistências nos dados. Faça filtros e modificações de acordo com o que julgar necessário, mencione clara e concisamente o que foi feito. Não apresente comandos no corpo do relatório e saídas desformatadas.-->
+
+As colunas Index, title, monster_real e date_aired não entrarão no nosso modelo. A primeira não entrará por se apenas uma variável que enumera as linhas do data frame. A segunda por seguir o mesmo princípio do index só que, em vez de numérico, ela nomeia cada observação (em suma, a segunda é uma variável categórica com todas as observações diferentes entre si, não fazendo sentido elas entrarem no modelo). A terceira pelo mesmo motivo da segundo, mas agora nomenando os monstros (tem até alguns nomes que se repetem, mas bem pouco). E a última não entrará por conta de ser difícil de utilizar datas como variáveis preditoras   
+
+
+Abaixo, temos as variáveis separadas por classes
+
+```{r}
+scooby <- scooby %>%select(-index,-title, -monster_name, -date_aired)
+
+scooby$imdb <- as.numeric(scooby$imdb)
+scooby$engagement <- as.numeric(scooby$engagement)
+
+character.scooby<-scooby %>% 
+  select_if(is.character)
+head(character.scooby)
+d.scooby<-scooby %>%
+  select_if(is.double)
+head(d.scooby)
+l.scooby<-scooby %>% 
+  select_if(is.logical)
+head(l.scooby)
+```
+
+
+
+
+```{r}
+character.scooby1 <- cbind(character.scooby,l.scooby)
+```
+
+
+Quantidade de observações das variáveis logicas:
+
+
+```{r}
+
+nome <- names(l.scooby)
+
+data.frame("Variável" = c(nome[1],nome[2],nome[3],nome[4],nome[5],nome[6],nome[7],nome[8],nome[9]), 
+                       "TRUE" = c(sum(l.scooby$unmask_other == TRUE),sum(l.scooby$caught_other == TRUE),sum(l.scooby$caught_not == TRUE),sum(l.scooby$door_gag == TRUE),sum(l.scooby$batman == TRUE),sum(l.scooby$scooby_dum == TRUE),sum(l.scooby$scrappy_doo == TRUE),sum(l.scooby$hex_girls == TRUE),sum(l.scooby$blue_falcon == TRUE)),"FALSE" = c(sum(l.scooby$unmask_other == FALSE),sum(l.scooby$caught_other == FALSE),sum(l.scooby$caught_not == FALSE),sum(l.scooby$door_gag == FALSE),sum(l.scooby$batman == FALSE),sum(l.scooby$scooby_dum == FALSE),sum(l.scooby$scrappy_doo == FALSE),sum(l.scooby$hex_girls == FALSE),sum(l.scooby$blue_falcon == FALSE))) %>% 
+  kbl(caption="Tabela 1:  Contagens de observações das variáveis lógicas") %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+```
+
+Note que as variáveis "batman" e "hex_girls" possuem poucas obserções classificadas como "TRUE". Isso pode gerar um problema na hora de separarmos os dados de treinamento e teste, pois pode ser que os dados de teste não tenham nenhuma dessas observações.  
+
+
+
+
+
+```{r}
+d.scooby1  = d.scooby %>% filter(!is.na(imdb), !is.na(engagement))
+media<-colMeans(d.scooby1)
+mediana<-apply(d.scooby1,2,median)
+quantis<-apply(d.scooby1,2,quantile)
+quantis <- as.matrix(quantis)
+minimo<-apply(d.scooby1,2,min)
+maximo<-apply(d.scooby1,2,max)
+sd.<-apply(d.scooby1,2,sd)
+var<-apply(d.scooby1,2,var)
+```
+
+
+```{r}
+nome <- names(d.scooby1)
+data.frame("Mínimo"=c(minimo[1:6]),
+           "1º Q." = c(quantis[2,1],quantis[2,2],quantis[2,3],quantis[2,4],quantis[2,5],quantis[2,6]),
+           "Média"= c(media[1:6]),
+           "Mediana" = c(mediana[1:6]),
+          "3º Q." = c(quantis[4,1],quantis[4,2],quantis[4,3],quantis[4,4],quantis[4,5],quantis[4,6]),
+           "Máximo"=c(maximo[1:6]),
+          "Var." = c(var[1:6]),
+           "Desvio Padrão"=c(sd.[1:6])
+           )%>% 
+  kbl(caption="Tabela 2:Estatística Descritivas das Variáveis numéricas") %>%
+  kable_classic(full_width = F, html_font = "Arial")
+```
+
+
+
+**Arrumar series_name**
+
+
+
+<!-- Utilize esses dados "arrumados" nos passos seguintes.-->
+
+
+<!-- Alguma variável será descartada logo de início? Justifique, se for o caso-->
+
+
+### Divisão dos dados
+
+<!-- Dados divididos em 75% treinamento e 25% teste, lembre de colocar um set.seed antes. Cite quantas obs ficaram em cada conjunto de dados. -->
+
+
+```{r}
+
+set.seed(22021)
+split_teste <- initial_split(scooby, prop=0.75,strata = monster_real)
+
+#dados teste 
+teste <- split_teste %>% testing()
+
+# dados treinamento 
+treino <- split_teste %>% training()
+
+```
+
+
+
+
+<!-- Explique o propósito dessa divisão. -->
+
+Esta divisão tem como propósito ajudar a encontrar o melhor modelo e evitar o superajustamento. Através dos dados de treinamento, serão ajustados modelos que consideramos razoáveis. O conjunto de dados teste servirá para se a performace do modelo está razoavel e também usaremos para que possamos interpretar um resultado.
+Caso não fosse feito essa divisão, pode ser que o modelo ajustado não se saia bem em novos conjuntos de dados. 
+
+
+## Análise exploratória
+
+<!-- Desconsidere os dados teste e apresente análise exploratória relevante dos dados treinamento para auxiliar nos passos iniciais da busca por um modelo.  Quais gráficos são relevantes para mostrar associação com a resposta? Se usar gráficos de barra, como apresentar e interpretar? Boxplots? Não coloque gráficos sem justificar/interpretar. Na análise descritiva fazemos muitos gráficos, dos vários feitos, quais são interessantes para "contar a história", tendo em mente o objetivo-->
+
+<!-- Caso decida utilizar transformação de alguma variável, criar outra variável, padronizar, etc... Aqui é o momento de motivar essas decisões. Se for este o caso, acrescente um parágrafo explicando as transformações que serão feitas (preprocessamento)-->
+
+<!-- Alguma variável será descartada logo de início? Justifique, se for o caso-->
+
+<!-- Deixe claro qual será sua matrix X: o que será excluído, o que será criado/transformado. Apresente isso de maneira clara e concisa -->
+
+
+## Em algum momento antes disso excluímos algumas linhas de d.scooby
+```{r,warning=FALSE}
+
+
+character.scooby.treino<-treino %>% 
+  select_if(is.character)
+head(character.scooby)
+d.scooby.treino<-treino %>%
+  select_if(is.double)
+head(d.scooby)
+l.scooby.treino<-treino %>% 
+  select_if(is.logical)
+head(l.scooby)
+
+
+
+
+
+
+d.scoobygg.treino<- d.scooby.treino
+
+#monstros1<-as.numeric(as.logical(scooby$monster_real))
+
+#monstros <- numeric(length(monstros1))
+#u=0
+#for (i in monstros1) {
+#  if (is.na(i)==TRUE){
+#    monstros[u]<- 0
+#    u=u+1
+#  }else{
+#    monstros[u]<- monstros1[u]
+#    u=u+1
+#  }
+#}
+
+
+d.scoobygg.treino<- mutate(d.scooby.treino,"monster_real" = as.numeric(as.logical(treino$monster_real)))
+#chart.Correlation(teste)
+
+
+
+#correlação<-chart.Correlation(d.scoobygg)
+#cor(d.scoobygg)
+ggpairs(d.scoobygg.treino)
+```
+
+
+```{r}
+#boxplot(d.scooby$imdb)
+#boxplot(d.scooby$engagement)
+#boxplot(d.scooby$run_time)
+#boxplot(d.scooby$monster_amount)
+#boxplot(d.scooby$suspects_amount)
+#boxplot(d.scooby$culprit_amount)
+
+d.scooby.treino%>%
+  ggplot()+
+  geom_boxplot(aes(y=imdb))+ylab("Notas IMBD")+
+  theme_minimal()
+```
+
+
+```{r}
+
+d.scooby.treino%>%
+  ggplot()+
+  geom_boxplot(aes(y=engagement))+ylab("Qunatidade de Notas no IMDB")+
+  theme_minimal()
+```
+
+Mesmo que seja contraintuitivo que a quantidade de avaliação de um episódio possua alguma chancec de descrever parte da variável resposta conseguimos observar que possuem uma correlação de 0.125 entre elas. Porém percebemos vários pontos dicrepantes ao olharmos para este box-plot , contudo o que nos chama a atenção é a presença de um valor dentro da casa das 100000 avaliações , com isso iremos visualizar a linha do data frame querepresenta esta tal episódio. 
+
+```{r}
+
+out<-scooby%>%filter(engagement>100000)
+## EXISTE ALGUMA FUNÇÃO NO LUGAR DE SELECT QUE TEM A MESMA APLICAÇÃO
+out
+```
+Podemos entender que o fato deste alto grau de engajamente se dá pois o episódio em questão se trata de um filme.
+
+```{r}
+d.scooby.treino%>%
+  ggplot()+
+  geom_boxplot(aes(y=run_time))+ylab("Tempo do episódio em minutos")+
+  theme_minimal()
+```  
+Podemos perceber que existem vários pontos discrepantes, porém é descartado o fato de erros de digitaçao . Contudo , conseguimmos ver através da tabela de correlação que boa parte da informação da variável resposta não é descrita pelo tempo em minutos do episódio, tendo a correlação entre as duas variáveis igual à 
+
+```{r}
+
+d.scooby.treino%>%
+  ggplot()+
+  geom_boxplot(aes(y=monster_amount))+ylab("Quantidade de Monstros")+
+  theme_minimal()
+```
+```{r}
+scooby.treino%>%filter(monster_amount>15.1)
+```
+
+
+  Conseguimos verificar vários pontos discrepantes, porém percebe-se que o fato de ter vário monstros se da pois o episódio se trata de um especial e portanto não conseguimos descartar o fato de se tratar de um erro de digitação.
+
+  Também temos uma correlação de (COLOCAR O VALOR CERTO AQUI)0.4, o uqe no sindica que uma parte considerável da variável resposta é representada por esa variável.
+
+
+
+```{r}  
+  
+d.scooby.treino%>%
+  ggplot()+
+  geom_boxplot(aes(y=suspects_amount))+ylab("Quantidade de suspeitos")+
+  theme_minimal()
+```
+
+
+```{r}  
+d.scooby.treino%>%
+  ggplot()+
+  geom_boxplot(aes(y=culprit_amount))+ylab("Quantidade de Culpados")+
+  theme_minimal()
+
+```
+
+
+## Modelos propostos
+
+<!-- Utilize somente os dados de treinamento, considerando a matriz X após análise descritiva.-->
+
+<!-- Caso precise ajustar hiperparâmetros/tunning parameters, use alguma forma de validação cruzada, lembre de usar set.seed. -->
+
+<!-- Caso algum preprocessamento específico para um determinado método seja necessário, cite o que foi feito e em quais modelos isso foi considerado, se for o caso -->
+
+<!-- Métodos podem ser LDA, QDA, Logística, LASSO, Ridge, KNN, árvores, bestglm (regsubsets para classificação), etc... escolha pelo menos 3 grandes grupos de métodos diferentes. --> 
+
+Primeiramente devemos começar utilizando RandomForest como modelo inicial.
+
+## ÁRVORES
+
+
+Usaremos o pacote `caret` com o intuito de aplicar o método de florestas aleatórias, porém primieramente devemos achar o m preditores como candidatos, porém temos que m é aproximadamaente $\sqrt(p)$, seno p o númeio total de colunas presentes no dataframe 
+```{r}
+treino1<- na.exclude(treino)
+
+control <- trainControl(method="oob")
+
+set.seed(2222)
+tunegrid <- data.frame(.mtry = sqrt(ncol(treino) - 1))
+rf.default = train(monster_real ~., data = treino1,method = "rf", trControl = control, tuneGrid=tunegrid)
+
+print(rf.default)
+```
+
+
+Utilizando o parâmetro de ajuste m = 8.366 e con=m isso conseguimos uma acurácia de 
+
+```{r}
+rf.default$finalModel
+```
+Temos que o modelo final nos retorna um erro de estimado de OOB de 6.9%
+
+
+
+
+### Título do Método 1 
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) se necessário. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule as métricas de avaliação de desempenho do modelo nos dados de treinamento: matriz de confusão, acurácia, especificidade, sensibilidade, entre outras que julgar interessante. Quando apresentar qualquer métrica pela primeira vez, defina-a em detalhes-->
+
+
+### Título do Método 2
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) se necessário. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule as métricas de avaliação de desempenho do modelo nos dados de treinamento: matriz de confusão, acurácia, especificidade, sensibilidade, entre outras que julgar interessante. Quando apresentar qualquer métrica pela primeira vez, defina-a em detalhes-->
+
+
+### Título do Método 3
+
+<!-- Use validação cruzada nos dados de treinamento (k-dobras, por exemplo) se necessário. Lembre de usar `set.seed`. Explique os passos até chegar no *melhor* modelo usando essa técnica-->
+
+<!-- Ajuste-o nos dados de treinamento e apresente brevemente os resultados. -->
+ 
+<!-- Calcule as métricas de avaliação de desempenho do modelo nos dados de treinamento: matriz de confusão, acurácia, especificidade, sensibilidade, entre outras que julgar interessante. Quando apresentar qualquer métrica pela primeira vez, defina-a em detalhes-->
+
+
+
+## Avaliação de modelos propostos
+
+<!-- Apresente uma tabela com as métricas de desempenho obtidas por validação cruzada em cada método utilizado. Você pode complementar como preferir. Por ex, mostrar ROC para os diversos métodos em um mesmo gráfico-->
+
+
+<!-- Baseando-se nessas informações, escolha o melhor modelo. Comente o que for necessário, justificando sua escolha. -->
+
+
+
+## Modelo Final
+
+<!-- Destaque aqui seu modelo final (ajustado considerando apenas os dados de treinamento), apresentando/interpretando em maiores detalhes. Como as preditoras são interpretáveis, faça um balanço entre modelos com alto poder preditivo vs interpretabilidade na sua escolha-->
+
+<!-- Apresente o resultado das métricas de desempenho do seu modelo final (ajustado no treino) na predição dos dados teste. -->
+
+
+<!-- Escreva um trecho nessa parte, descrevendo esse modelo para uma pessoa "leiga"--> 
